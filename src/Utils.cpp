@@ -32,26 +32,26 @@ namespace Utils {
         return std::format("0x{:08X}~Unknown", formID);
     }
 
-    RE::TESForm* ParseForm(const std::string& str) {
+    RE::FormID ParseForm(const std::string& str) {
         auto pos = str.find('~');
         if (pos == std::string::npos) {
-            return nullptr;
+            return 0;
         }
 
         std::string idPart = str.substr(0, pos);
         std::string modName = str.substr(pos + 1);
 
-        uint32_t localID = std::stoul(idPart, nullptr, 16);
+        RE::FormID localID = std::stoul(idPart, nullptr, 16);
 
         auto* dataHandler = RE::TESDataHandler::GetSingleton();
         if (!dataHandler) {
-            return nullptr;
+            return 0;
         }
 
         const RE::TESFile* mod = dataHandler->LookupModByName(modName);
         if (!mod) {
             logger::error("Can't find mod: {}", modName);
-            return nullptr;
+            return 0;
         }
 
         // ESL (light plugin)
@@ -60,12 +60,16 @@ namespace Utils {
         }
 
         RE::TESForm* form = dataHandler->LookupForm(localID, modName);
+        // fallback to manual ID construction if form lookup fails
+        // this is a case for unloaded references
         if (!form) {
-            logger::error("Can't find form: {:X}~{}", localID, modName);
-            return nullptr;
+            auto modIndex =
+                mod->IsLight() ? (0xFE << 12) | (mod->smallFileCompileIndex & 0xFFF) : (mod->compileIndex & 0xFF);
+            auto fullID = (modIndex << 24) | localID;
+            return fullID;
         }
 
-        return form;
+        return form->GetFormID();
     }
 
     void ApplySpeedToNode(RE::NiAVObject* node, float speed) {
@@ -109,13 +113,12 @@ namespace Utils {
     // This is a holy grail function that allows us to replace the model of any reference with any model.
     // This is done by directly loading the NIF file of the new model and applying it to the reference.
     void ReplaceModel(RE::TESObjectREFR* ref, std::string modelPath) {
-        if (!ref) return;
-        if (!modelPath.ends_with(".nif")) {
-            logger::error("Model file is not a NIF: {}", modelPath);
-            return;
-        }
         SKSE::GetTaskInterface()->AddTask([ref, modelPath = std::move(modelPath)]() {
-            logger::debug("Replacing model of {:08X} with {}", ref->GetFormID(), modelPath);
+            if (!ref) return;
+            if (!modelPath.ends_with(".nif")) {
+                logger::error("Model file is not a NIF: {}", modelPath);
+                return;
+            }
             RE::NiPointer<RE::NiNode> newModel{nullptr};
             if (RE::BSResource::ErrorCode::kNone == RE::BSModelDB::Demand(modelPath.c_str(), newModel, {})) {
                 RE::NiPointer<RE::NiObject> deepCopy;
@@ -133,13 +136,15 @@ namespace Utils {
     }
 
     void ReplaceBaseObject(RE::TESObjectREFR* ref, RE::TESBoundObject* newBase) {
-        if (!ref || !newBase) {
-            logger::error("Invalid reference or base object for replacement");
-            return;
-        }
-        ref->data.objectReference = newBase;
-        ref->Disable();
-        ref->Enable(false);
+        SKSE::GetTaskInterface()->AddTask([ref, newBase]() {
+            if (!ref || !newBase) {
+                logger::error("Invalid reference or base object for replacement");
+                return;
+            }
+            ref->data.objectReference = newBase;
+            ref->Disable();
+            ref->Enable(false);
+        });
     }
 
     std::string GetModelPath(RE::TESBoundObject* base) {
@@ -190,6 +195,35 @@ namespace Utils {
         if (auto door = base->As<RE::TESObjectDOOR>()) {
             return door->model.c_str();
         }
+    }
+
+    bool IsInWindCell(RE::TESObjectREFR* ref) {
+        if (!ref) {
+            return false;
+        }
+        RE::BGSLocation* worldspaceLocation{nullptr};
+        RE::BGSLocation* cellLocation{nullptr};
+
+        auto currentWorldspace = ref->GetWorldspace();
+        if (currentWorldspace) {
+            worldspaceLocation = currentWorldspace->location;
+        }
+        auto currentCell = ref->GetParentCell();
+        if (currentCell) {
+            cellLocation = currentCell->GetLocation();
+        }
+
+        bool isCaveWorldspace = worldspaceLocation ? worldspaceLocation->HasKeywordByEditorID("LocSetCave") ||
+                                                         worldspaceLocation->HasKeywordByEditorID("LocSetCaveIce")
+                                                   : false;
+        bool isCaveCell = cellLocation ? cellLocation->HasKeywordByEditorID("LocSetCave") ||
+                                             cellLocation->HasKeywordByEditorID("LocSetCaveIce")
+                                       : false;
+
+        if (currentCell->IsInteriorCell() || isCaveWorldspace) {
+            return false;
+        }
+        return true;
     }
 }
         

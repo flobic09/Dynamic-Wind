@@ -94,14 +94,14 @@ private:
             return false;
         }
 
-        auto* form = Utils::ParseForm(j["FormID"].get<std::string>());
+        auto formID = Utils::ParseForm(j["FormID"].get<std::string>());
 
-        if (!form) {
+        if (formID == 0) {
             logger::error("Failed to parse FormID {} '{}'", j["FormID"].get<std::string>(), outConfig.formID);
             return false;
         }
 
-        outConfig.formID = form->GetFormID();
+        outConfig.formID = formID;
         outConfig.filePath = path;
 
         if (outConfig.formID == 0) {

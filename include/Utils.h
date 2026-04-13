@@ -4,7 +4,8 @@
 
 namespace Utils {
     std::string FormIDToString(RE::FormID formID);
-    RE::TESForm* ParseForm(const std::string& str);
+    RE::FormID ParseForm(const std::string& str);
+
 
     void ApplySpeedToNode(RE::NiAVObject* node, float speed);
 
@@ -15,4 +16,6 @@ namespace Utils {
     void ReplaceBaseObject(RE::TESObjectREFR* ref, RE::TESBoundObject* newBase);
 
     std::string GetModelPath(RE::TESBoundObject* base);
+
+    bool IsInWindCell(RE::TESObjectREFR* ref);
 }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Settings.h"
+
 #include "AnimationHandler.h"
 #include "BaseObjSwapHandler.h"
 #include "ModelSwapHandler.h"
@@ -25,45 +27,104 @@ struct WindObjectConfigs {
 
 class WindFramework : public REX::Singleton<WindFramework> {
 public:
-    void Update(float strength, float angle) {
-        treeHandler_.Update(strength, angle);
-
+    void Update(float strength, float angle, float deltaTime) {
+        auto* conf = Config::GetSingleton();
+        if (conf->TreeHandlerEnabled) {
+            treeHandler_.Update(strength, angle);
+        }
         std::unique_lock lock(mutex_);
-        _trackedRefs.erase(std::remove_if(_trackedRefs.begin(), _trackedRefs.end(),
-                                          [&](auto& refHandle) {
-                                              auto ref = refHandle.get().get();
-                                              if (!ref) {
-                                                  return true;  // remove
-                                              }
-
-                                              animationHandler_.Apply(ref, strength, angle);
-                                              rotationHandler_.Apply(ref, strength, angle);
-                                              visibilityHandler_.Apply(ref, strength, angle);
-                                              pushHandler_.Apply(ref, strength, angle);
-
-                                              return false;  // keep
-                                          }),
-                           _trackedRefs.end());
+        if (conf->RotationHandlerEnabled) {
+            for (auto it = _trackedRotationRefs.begin(); it != _trackedRotationRefs.end();) {
+                auto ref = it->second.get().get();
+                if (!ref) {
+                    it = _trackedRotationRefs.erase(it);
+                } else {
+                    rotationHandler_.Apply(ref, strength, angle);
+                    ++it;
+                }
+            }
+        }
+        if (conf->AnimationHandlerEnabled) {
+            for (auto it = _trackedAnimationRefs.begin(); it != _trackedAnimationRefs.end();) {
+                auto ref = it->second.get().get();
+                if (!ref) {
+                    it = _trackedAnimationRefs.erase(it);
+                } else {
+                    animationHandler_.Apply(ref, strength, angle);
+                    ++it;
+                }
+            }
+        }
+        if (conf->VisibilityHandlerEnabled) {
+            for (auto it = _trackedVisibilityRefs.begin(); it != _trackedVisibilityRefs.end();) {
+                auto ref = it->second.get().get();
+                if (!ref) {
+                    it = _trackedVisibilityRefs.erase(it);
+                } else {
+                    visibilityHandler_.Apply(ref, strength, angle);
+                    ++it;
+                }
+            }
+        }
+        if (conf->PushHandlerEnabled) {
+            for (auto it = _trackedPushRefs.begin(); it != _trackedPushRefs.end();) {
+                auto ref = it->second.get().get();
+                if (!ref) {
+                    it = _trackedPushRefs.erase(it);
+                } else {
+                    pushHandler_.Apply(ref, strength, angle);
+                    ++it;
+                }
+            }
+        }
     }
 
     void NewTargets(float strength, float angle) {
+        auto* conf = Config::GetSingleton();
+
         std::unique_lock lock(mutex_);
-        _trackedRefs.erase(std::remove_if(_trackedRefs.begin(), _trackedRefs.end(),
-                                          [&](auto& refHandle) {
-                                              auto ref = refHandle.get().get();
-                                              if (!ref) {
-                                                  return true;  // remove
-                                              }
-                                              rotationHandler_.Apply(ref, strength, angle, true);
-                                              //modelSwapHandler_.Apply(ref, strength, angle);
-                                              baseObjSwapHandler_.Apply(ref, strength, angle);
-                                              return false;  // keep
-                                          }),
-                           _trackedRefs.end());
+
+        if (conf->RotationHandlerEnabled) {
+            for (auto it = _trackedRotationRefs.begin(); it != _trackedRotationRefs.end();) {
+                auto ref = it->second.get().get();
+                if (!ref) {
+                    it = _trackedRotationRefs.erase(it);
+                } else {
+                    rotationHandler_.Apply(ref, strength, angle, true);
+                    ++it;
+                }
+            }
+        }
+
+        if (conf->ModelSwapHandlerEnabled) {
+            for (auto it = _trackedModelSwapRefs.begin(); it != _trackedModelSwapRefs.end();) {
+                auto ref = it->second.get().get();
+                if (!ref) {
+                    it = _trackedModelSwapRefs.erase(it);
+                } else {
+                    modelSwapHandler_.Apply(ref, strength, angle);
+                    ++it;
+                }
+            }
+        }
+
+        if (conf->BaseObjSwapHandlerEnabled) {
+            for (auto it = _trackedBaseObjSwapRefs.begin(); it != _trackedBaseObjSwapRefs.end();) {
+                auto ref = it->second.get().get();
+                if (!ref) {
+                    it = _trackedBaseObjSwapRefs.erase(it);
+                } else {
+                    baseObjSwapHandler_.Apply(ref, strength, angle);
+                    ++it;
+                }
+            }
+        }
     }
 
-    void RefLoad(RE::TESObjectREFR* ref, float targetStrength, float targetAngle) {
+    void RefLoad(RE::TESObjectREFR* ref, float angle = 0.0f, float strength = 0.0f) {
         if (!ref) return;
+
+        if (!Utils::IsInWindCell(ref)) return;
 
         auto baseObj = ref->GetBaseObject();
         if (!baseObj) return;
@@ -71,25 +132,27 @@ public:
         auto baseFormID = baseObj->GetFormID();
         auto formID = ref->GetFormID();
 
+        auto* conf = Config::GetSingleton();
+
         std::unique_lock lock(mutex_);
-        if (animationHandler_.HasConfig(baseFormID) || animationHandler_.HasConfig(formID)) {
-            auto handle = ref->GetHandle();
-            _trackedRefs.push_back(handle);
-        } else if (rotationHandler_.HasConfig(baseFormID) || rotationHandler_.HasConfig(formID)) {
-            auto handle = ref->GetHandle();
-            _trackedRefs.push_back(handle);
-        } else if (visibilityHandler_.HasConfig(baseFormID) || visibilityHandler_.HasConfig(formID)) {
-            auto handle = ref->GetHandle();
-            _trackedRefs.push_back(handle);
-        } else if (pushHandler_.HasConfig(baseFormID) || pushHandler_.HasConfig(formID)) {
-            auto handle = ref->GetHandle();
-            _trackedRefs.push_back(handle);
-        } else if (modelSwapHandler_.HasConfig(baseFormID) || modelSwapHandler_.HasConfig(formID)) {
-            auto handle = ref->GetHandle();
-            _trackedRefs.push_back(handle);
-        } else if (baseObjSwapHandler_.HasConfig(baseFormID) || baseObjSwapHandler_.HasConfig(formID)) {
-            auto handle = ref->GetHandle();
-            _trackedRefs.push_back(handle);
+        if (conf->AnimationHandlerEnabled && (animationHandler_.HasConfig(baseFormID) || animationHandler_.HasConfig(formID))) {
+            _trackedAnimationRefs.try_emplace(ref->GetFormID(), ref->GetHandle());
+        } else if (conf->RotationHandlerEnabled && (rotationHandler_.HasConfig(baseFormID) || rotationHandler_.HasConfig(formID))) {
+            if (_trackedRotationRefs.try_emplace(ref->GetFormID(), ref->GetHandle()).second) {
+                rotationHandler_.Apply(ref, strength, angle, true);
+            }
+        } else if (conf->VisibilityHandlerEnabled && (visibilityHandler_.HasConfig(baseFormID) || visibilityHandler_.HasConfig(formID))) {
+            _trackedVisibilityRefs.try_emplace(ref->GetFormID(), ref->GetHandle());
+        } else if (conf->PushHandlerEnabled && (pushHandler_.HasConfig(baseFormID) || pushHandler_.HasConfig(formID))) {
+            _trackedPushRefs.try_emplace(ref->GetFormID(), ref->GetHandle());
+        } else if (conf->ModelSwapHandlerEnabled && (modelSwapHandler_.HasConfig(baseFormID) || modelSwapHandler_.HasConfig(formID))) {
+            if (_trackedModelSwapRefs.try_emplace(ref->GetFormID(), ref->GetHandle()).second) {
+                modelSwapHandler_.Apply(ref, strength, angle);
+            }
+        } else if (conf->BaseObjSwapHandlerEnabled && (baseObjSwapHandler_.HasConfig(baseFormID) || baseObjSwapHandler_.HasConfig(formID))) {
+            if (_trackedBaseObjSwapRefs.try_emplace(ref->GetFormID(), ref->GetHandle()).second) {
+                baseObjSwapHandler_.Apply(ref, strength, angle);
+            }
         }
 
         // --- other object types TBD ---
@@ -221,8 +284,9 @@ public:
     }
     void RemoveModelSwapConfig(const RE::FormID formID) { modelSwapHandler_.RemoveConfig(formID); }
 
-    void AddNewBaseObjSwapConfig(const std::vector<BaseObjSwapEntry>& swaps, float headingRotation, float angleFactor) {
-        baseObjSwapHandler_.AddNewConfig(swaps, headingRotation, angleFactor);
+    void AddNewBaseObjSwapConfig(const RE::FormID formID, const std::vector<BaseObjSwapEntry>& swaps,
+                                 float headingRotation, float angleFactor) {
+        baseObjSwapHandler_.AddNewConfig(formID, swaps, headingRotation, angleFactor);
     }
     void RemoveBaseObjSwapConfig(const RE::FormID formID) { baseObjSwapHandler_.RemoveConfig(formID); }
 
@@ -236,5 +300,10 @@ private:
     VisibilityHandler visibilityHandler_;
 
     std::shared_mutex mutex_;
-    std::vector<RE::ObjectRefHandle> _trackedRefs;
+    std::unordered_map<RE::FormID, RE::ObjectRefHandle> _trackedAnimationRefs;
+    std::unordered_map<RE::FormID, RE::ObjectRefHandle> _trackedBaseObjSwapRefs;
+    std::unordered_map<RE::FormID, RE::ObjectRefHandle> _trackedModelSwapRefs;
+    std::unordered_map<RE::FormID, RE::ObjectRefHandle> _trackedPushRefs;
+    std::unordered_map<RE::FormID, RE::ObjectRefHandle> _trackedRotationRefs;
+    std::unordered_map<RE::FormID, RE::ObjectRefHandle> _trackedVisibilityRefs;
 };

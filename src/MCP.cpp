@@ -1,6 +1,7 @@
 ﻿#include "MCP.h"
 
 #include "WindManager.h"
+#include "Settings.h"
 #include "SKSEMCP/SKSEMenuFramework.hpp"
 
 namespace MCP {
@@ -11,6 +12,7 @@ namespace MCP {
             return;
         }
         SKSEMenuFramework::SetSection("Dynamic Wind");
+        SKSEMenuFramework::AddSectionItem("Settings", RenderConfig);
         SKSEMenuFramework::AddSectionItem("Framework Options", RenderFrameworkTools);
         SKSEMenuFramework::AddSectionItem("Loaded Configuration", RenderLoadedConfigs);
 #ifndef NDEBUG
@@ -18,6 +20,20 @@ namespace MCP {
 #endif
 
         logger::info("SKSE Menu Framework registered.");
+    }
+
+    void __stdcall RenderConfig() { auto* set = Config::GetSingleton();
+        ImGuiMCP::Checkbox("Mod Active", &set->ModActive);
+        ImGuiMCP::Checkbox("Animation Handler", &set->AnimationHandlerEnabled);
+        ImGuiMCP::Checkbox("Base Object Swap Handler", &set->BaseObjSwapHandlerEnabled);
+        ImGuiMCP::Checkbox("Model Swap Handler", &set->ModelSwapHandlerEnabled);
+        ImGuiMCP::Checkbox("Push Handler", &set->PushHandlerEnabled);
+        ImGuiMCP::Checkbox("Rotation Handler", &set->RotationHandlerEnabled);
+        ImGuiMCP::Checkbox("Tree Handler", &set->TreeHandlerEnabled);
+        ImGuiMCP::Checkbox("Visibility Handler", &set->VisibilityHandlerEnabled);
+        if (ImGuiMCP::Button("Save Settings")) {
+            set->SaveIni();
+        }
     }
 
     static const char* GetCompassLabel(float windAngle) {
@@ -35,16 +51,15 @@ namespace MCP {
 
         auto* sky = RE::Sky::GetSingleton();
 
-        ImGuiMCP::Text("Wind Data");
-        auto isRaining = sky->IsRaining();
-        auto isSnowing = sky->IsSnowing();
-
-        ImGuiMCP::Text("Is Raining: %s", isRaining ? "Yes" : "No");
-        ImGuiMCP::Text("Is Snowing: %s", isSnowing ? "Yes" : "No");
-        ImGuiMCP::Text("Wind Direction: %s", GetCompassLabel(sky->windAngle));
-
         if (sky) {
+            ImGuiMCP::Text("Wind Data");
+            auto isRaining = sky->IsRaining();
+            auto isSnowing = sky->IsSnowing();
+
+            ImGuiMCP::Text("Is Raining: %s", isRaining ? "Yes" : "No");
+            ImGuiMCP::Text("Is Snowing: %s", isSnowing ? "Yes" : "No");
             auto* windManager = Wind::Manager::GetSingleton();
+
             if (ImGuiMCP::CollapsingHeader("Wind Manager", ImGuiMCP::ImGuiTreeNodeFlags_DefaultOpen)) {
                 static bool enableTestMode = false;
                 if (ImGuiMCP ::Checkbox("Test Mode", &enableTestMode)) {
@@ -56,26 +71,42 @@ namespace MCP {
                     windManager->SetUpdateFramework(updateFramework);
                 }
                 auto [windAngle, windSpeed] = windManager->GetTargets();
-                ImGuiMCP::Text("Wind Speed Target: %.1f", windSpeed);
                 ImGuiMCP::Text("Wind Direction Target: %.1f", windAngle);
+                ImGuiMCP::SameLine();
+                ImGuiMCP::Text(" (%s)", GetCompassLabel(windAngle));
+                ImGuiMCP::Text("Wind Speed Target: %.1f", windSpeed);
 
-                if (ImGuiMCP::SliderFloat("Sky: Wind Direction", &sky->windAngle, -M_PI, M_PI)) {
-                    windManager->SetTargets(sky->windAngle, sky->windSpeed);
+                ImGuiMCP::SliderFloat("Sky: Wind Direction", &sky->windAngle, -M_PI, M_PI);
+                ImGuiMCP::SameLine();
+                ImGuiMCP::Text(" (%s)", GetCompassLabel(sky->windAngle));
+                ImGuiMCP::SliderFloat("Sky: Wind Speed", &sky->windSpeed, 0.0f, 1.0f);
+                static float newAngle{0.0f}, newSpeed{0.0f};
+                ImGuiMCP::SliderFloat("New Target Direction", &newAngle, -M_PI, M_PI);
+                ImGuiMCP::SameLine();
+                ImGuiMCP::Text(" (%s)", GetCompassLabel(newAngle));
+                ImGuiMCP::SliderFloat("New Target Speed", &newSpeed, 0.0f, 1.0f);
+                if (ImGuiMCP::Button("Applay New Targets")) {
+                    windManager->SetTargets(newAngle, newSpeed);
                 }
-                if (ImGuiMCP::SliderFloat("Sky: Wind Speed", &sky->windSpeed, 0.0f, 1.0f)) {
-                    windManager->SetTargets(sky->windAngle, sky->windSpeed);
+                ImGuiMCP::SameLine();
+                if (ImGuiMCP::Button("Refresh All refs")) {
+                    RE::TES::GetSingleton()->ForEachReference([](RE::TESObjectREFR* ref) {
+                        auto [angle, strength] = Wind::Manager::GetSingleton()->GetTargets();
+                        WindFramework::GetSingleton()->RefLoad(ref, angle, strength);
+                        return RE::BSContainer::ForEachResult::kContinue;
+                    });
                 }
-            }
-        }
-        if (ImGuiMCP::CollapsingHeader("Tree Manager")) {
-            auto* treeMgr = RE::BSTreeManager::GetSingleton();
-            if (treeMgr) {
-                float treeDir = std::atan2(treeMgr->windDirection.x, treeMgr->windDirection.y);
-                if (ImGuiMCP::SliderFloat("TreeManager: Wind Direction", &treeDir, -M_PI, M_PI)) {
-                    treeMgr->windDirection.x = std::sin(treeDir);
-                    treeMgr->windDirection.y = std::cos(treeDir);
+                auto* treeMgr = RE::BSTreeManager::GetSingleton();
+                if (treeMgr) {
+                    ImGuiMCP::Text("TreeWind x: %.2f", treeMgr->windDirection.x);
+                    ImGuiMCP::Text("TreeWind y: %.2f", treeMgr->windDirection.y);
+                    float treeDir = std::atan2(treeMgr->windDirection.x, treeMgr->windDirection.y);
+                    if (ImGuiMCP::SliderFloat("TreeManager: Wind Direction", &treeDir, -M_PI, M_PI)) {
+                        treeMgr->windDirection.x = std::sin(treeDir);
+                        treeMgr->windDirection.y = std::cos(treeDir);
+                    }
+                    ImGuiMCP::SliderFloat("TreeManager: Wind Magnitude", &treeMgr->windMagnitude, 0.0f, 10.0f);
                 }
-                ImGuiMCP::SliderFloat("TreeManager: Wind Magnitude", &treeMgr->windMagnitude, 0.0f, 10.0f);
             }
         }
 
@@ -89,26 +120,6 @@ namespace MCP {
                         auto& data = tree->data;
 
                         if (ImGuiMCP::CollapsingHeader("Tree Wind Settings")) {
-                            if (!windFram->HasTreeConfig(tree->GetFormID())) {
-                                TreeDataConfig cfg;
-                                cfg.trunkFlexibility = data.trunkFlexibility;
-                                cfg.branchFlexibility = data.branchFlexibility;
-
-                                cfg.trunkAmplitude = data.trunkAmplitude;
-
-                                cfg.frontAmplitude = data.frontAmplitude;
-                                cfg.backAmplitude = data.backAmplitude;
-                                cfg.sideAmplitude = data.sideAmplitude;
-
-                                cfg.frontFrequency = data.frontFrequency;
-                                cfg.backFrequency = data.backFrequency;
-                                cfg.sideFrequency = data.sideFrequency;
-
-                                cfg.leafFlexibility = data.leafFlexibility;
-                                cfg.leafAmplitude = data.leafAmplitude;
-                                cfg.leafFrequency = data.leafFrequency;
-                                windFram->AddNewTreeConfig(tree, cfg);
-                            }
 
                             ImGuiMCP::SliderFloat("Trunk Flexibility", &data.trunkFlexibility, 0.0f, 10.0f);
                             ImGuiMCP::SliderFloat("Trunk Amplitude", &data.trunkAmplitude, 0.0f, 10.0f);
@@ -135,7 +146,7 @@ namespace MCP {
                             ImGuiMCP::SliderFloat("Leaf Amplitude", &data.leafAmplitude, 0.0f, 10.0f);
                             ImGuiMCP::SliderFloat("Leaf Frequency", &data.leafFrequency, 0.0f, 10.0f);
 
-                            if (ImGuiMCP::Button("Applay")) {
+                            if (ImGuiMCP::Button("Applay Leaf Settings")) {
                                 ref->Disable();
                                 ref->Enable(false);
                             }
@@ -195,33 +206,42 @@ namespace MCP {
                         static float maxAnimSpeed = 1.0f;
                         static float headingRotation = 0.0f;
                         static float angleFactor = 0.0f;
-                        if (ImGuiMCP::SliderFloat("Min Animation Speed", &minAnimSpeed, -10.0f, 20.0f)) {
-                            Utils::ApplySpeedToNode(ref->Get3D(), minAnimSpeed);
-                        }
-                        if (ImGuiMCP::InputFloat("MinAS:", &minAnimSpeed)) {
-                            Utils::ApplySpeedToNode(ref->Get3D(), minAnimSpeed);
-                        }
-                        if (ImGuiMCP::SliderFloat("Max Animation Speed", &maxAnimSpeed, -10.0f, 20.0f)) {
-                            Utils::ApplySpeedToNode(ref->Get3D(), maxAnimSpeed);
-                        }
-                        if (ImGuiMCP::InputFloat("MaxAS:", &maxAnimSpeed)) {
-                            Utils::ApplySpeedToNode(ref->Get3D(), maxAnimSpeed);
-                        }
+                        ImGuiMCP::SliderFloat("Min Animation Speed", &minAnimSpeed, -10.0f, 20.0f);
+                        ImGuiMCP::InputFloat("MinAS:", &minAnimSpeed);
+                        ImGuiMCP::SliderFloat("Max Animation Speed", &maxAnimSpeed, -10.0f, 20.0f);
+                        ImGuiMCP::InputFloat("MaxAS:", &maxAnimSpeed);
+
                         if (minAnimSpeed > maxAnimSpeed) maxAnimSpeed = minAnimSpeed;
+                        if (ImGuiMCP::Button("Applay min speed")) {
+                            Utils::ApplySpeedToNode(ref->Get3D(), minAnimSpeed);
+                        }
+                        ImGuiMCP::SameLine();
+                        if (ImGuiMCP::Button("Applay max speed")) {
+                            Utils::ApplySpeedToNode(ref->Get3D(), maxAnimSpeed);
+                        }
+
                         ImGuiMCP::SliderFloat("Global Heading Rotation", &headingRotation, -M_PI, M_PI, "%.2f");
                         ImGuiMCP::SliderFloat("Global Angle Factor", &angleFactor, 0.0f, 1.0f, "%.2f");
                         if (ImGuiMCP::Button("Save Animation Config (Base)")) {
                                 windFram->AddNewAnimationConfig(base, minAnimSpeed, maxAnimSpeed, headingRotation,
                                                                 angleFactor);
                             
-                            windFram->RefLoad(ref, 0.0f, 0.0f);
+                            RE::TES::GetSingleton()->ForEachReference([](RE::TESObjectREFR* ref) {
+                                    auto [angle, strength] = Wind::Manager::GetSingleton()->GetTargets();
+                                    WindFramework::GetSingleton()->RefLoad(ref, angle, strength);
+                                    return RE::BSContainer::ForEachResult::kContinue;
+                                });
                         }
                         ImGuiMCP::SameLine();
                         if (ImGuiMCP::Button("Save Animation Config (Ref)")) {
                                 windFram->AddNewAnimationConfig(ref, minAnimSpeed, maxAnimSpeed, headingRotation,
                                                                 angleFactor);
                             
-                            windFram->RefLoad(ref, 0.0f, 0.0f);
+                            RE::TES::GetSingleton()->ForEachReference([](RE::TESObjectREFR* ref) {
+                                    auto [angle, strength] = Wind::Manager::GetSingleton()->GetTargets();
+                                    WindFramework::GetSingleton()->RefLoad(ref, angle, strength);
+                                    return RE::BSContainer::ForEachResult::kContinue;
+                                });
                         }
                         ImGuiMCP::SameLine();
                         if (ImGuiMCP::Button("Remove Animation Config (Base)")) {
@@ -268,14 +288,20 @@ namespace MCP {
 
                         if (ImGuiMCP::Button("Save Rotation Config (Base)")) {
                             windFram->AddNewRotationConfig(base, headingRotation, allowedAngles);
-                            auto [windAngle, windSpeed] = Wind::Manager::GetSingleton()->GetTargets();
-                            windFram->RefLoad(ref, windSpeed, windAngle);
+                            RE::TES::GetSingleton()->ForEachReference([](RE::TESObjectREFR* ref) {
+                                auto [angle, strength] = Wind::Manager::GetSingleton()->GetTargets();
+                                WindFramework::GetSingleton()->RefLoad(ref, angle, strength);
+                                return RE::BSContainer::ForEachResult::kContinue;
+                            });
                         }
                         ImGuiMCP::SameLine();
                         if (ImGuiMCP::Button("Save Rotation Config (Ref)")) {
                             windFram->AddNewRotationConfig(ref, headingRotation, allowedAngles);
-                            auto [windAngle, windSpeed] = Wind::Manager::GetSingleton()->GetTargets();
-                            windFram->RefLoad(ref, windSpeed, windAngle);
+                            RE::TES::GetSingleton()->ForEachReference([](RE::TESObjectREFR* ref) {
+                                auto [angle, strength] = Wind::Manager::GetSingleton()->GetTargets();
+                                WindFramework::GetSingleton()->RefLoad(ref, angle, strength);
+                                return RE::BSContainer::ForEachResult::kContinue;
+                            });
                         }
                         ImGuiMCP::SameLine();
                         if (ImGuiMCP::Button("Remove Rotation Config (Base)")) {
@@ -305,15 +331,21 @@ namespace MCP {
                         if (ImGuiMCP::Button("Save Visibility Config (Base)")) {
                             windFram->AddNewVisibilityConfig(base, minVisibility, maxVisibility, minWindStrength,
                                                              maxWindStrength, headingRotation, angleFactor);
-                            auto [windAngle, windSpeed] = Wind::Manager::GetSingleton()->GetTargets();
-                            windFram->RefLoad(ref, windSpeed, windAngle);
+                            RE::TES::GetSingleton()->ForEachReference([](RE::TESObjectREFR* ref) {
+                                auto [angle, strength] = Wind::Manager::GetSingleton()->GetTargets();
+                                WindFramework::GetSingleton()->RefLoad(ref, angle, strength);
+                                return RE::BSContainer::ForEachResult::kContinue;
+                            });
                         }
                         ImGuiMCP::SameLine();
                         if (ImGuiMCP::Button("Save Visibility Config (Ref)")) {
                             windFram->AddNewVisibilityConfig(ref, minVisibility, maxVisibility, minWindStrength,
                                                              maxWindStrength, headingRotation, angleFactor);
-                            auto [windAngle, windSpeed] = Wind::Manager::GetSingleton()->GetTargets();
-                            windFram->RefLoad(ref, windSpeed, windAngle);
+                            RE::TES::GetSingleton()->ForEachReference([](RE::TESObjectREFR* ref) {
+                                auto [angle, strength] = Wind::Manager::GetSingleton()->GetTargets();
+                                WindFramework::GetSingleton()->RefLoad(ref, angle, strength);
+                                return RE::BSContainer::ForEachResult::kContinue;
+                            });
                         }
                         ImGuiMCP::SameLine();
                         if (ImGuiMCP::Button("Remove Visibility Config (Base)")) {
@@ -332,14 +364,20 @@ namespace MCP {
                         ImGuiMCP::InputFloat("WS:", &windSensitivity);
                         if (ImGuiMCP::Button("Save Push Config (Base)")) {
                             windFram->AddNewPushConfig(base, windSensitivity);
-                            auto [windAngle, windSpeed] = Wind::Manager::GetSingleton()->GetTargets();
-                            windFram->RefLoad(ref, windSpeed, windAngle);
+                            RE::TES::GetSingleton()->ForEachReference([](RE::TESObjectREFR* ref) {
+                                auto [angle, strength] = Wind::Manager::GetSingleton()->GetTargets();
+                                WindFramework::GetSingleton()->RefLoad(ref, angle, strength);
+                                return RE::BSContainer::ForEachResult::kContinue;
+                            });
                         }
                         ImGuiMCP::SameLine();
                         if (ImGuiMCP::Button("Save Push Config (Ref)")) {
                             windFram->AddNewPushConfig(ref, windSensitivity);
-                            auto [windAngle, windSpeed] = Wind::Manager::GetSingleton()->GetTargets();
-                            windFram->RefLoad(ref, windSpeed, windAngle);
+                            RE::TES::GetSingleton()->ForEachReference([](RE::TESObjectREFR* ref) {
+                                auto [angle, strength] = Wind::Manager::GetSingleton()->GetTargets();
+                                WindFramework::GetSingleton()->RefLoad(ref, angle, strength);
+                                return RE::BSContainer::ForEachResult::kContinue;
+                            });
                         }
                         ImGuiMCP::SameLine();
                         if (ImGuiMCP::Button("Remove Push Config (Base)")) {
@@ -398,14 +436,20 @@ namespace MCP {
 
                         if (ImGuiMCP::Button("Save ModelSwap Config (Base)")) {
                             windFram->AddNewModelSwapConfig(base, headingRotation, angleFactor, swaps);
-                            auto [windAngle, windSpeed] = Wind::Manager::GetSingleton()->GetTargets();
-                            windFram->RefLoad(ref, windSpeed, windAngle);
+                            RE::TES::GetSingleton()->ForEachReference([](RE::TESObjectREFR* ref) {
+                                auto [angle, strength] = Wind::Manager::GetSingleton()->GetTargets();
+                                WindFramework::GetSingleton()->RefLoad(ref, angle, strength);
+                                return RE::BSContainer::ForEachResult::kContinue;
+                            });
                         }
                         ImGuiMCP::SameLine();
                         if (ImGuiMCP::Button("Save ModelSwap Config (Ref)")) {
                             windFram->AddNewModelSwapConfig(ref, headingRotation, angleFactor, swaps);
-                            auto [windAngle, windSpeed] = Wind::Manager::GetSingleton()->GetTargets();
-                            windFram->RefLoad(ref, windSpeed, windAngle);
+                            RE::TES::GetSingleton()->ForEachReference([](RE::TESObjectREFR* ref) {
+                                auto [angle, strength] = Wind::Manager::GetSingleton()->GetTargets();
+                                WindFramework::GetSingleton()->RefLoad(ref, angle, strength);
+                                return RE::BSContainer::ForEachResult::kContinue;
+                            });
                         }
                         ImGuiMCP::SameLine();
                         if (ImGuiMCP::Button("Clear List")) {
@@ -434,25 +478,15 @@ namespace MCP {
                         ImGuiMCP::Text(formIDStr.c_str());
 
                         ImGuiMCP::SameLine();
-                        if (ImGuiMCP::Button("Add Entry (Base)")) {
-                            if (auto* form = base->As<RE::TESForm>()) {
-                                swaps.push_back({strength, form});
-                            }
-                        }
-                        if (swaps.size() == 0) {
-                            ImGuiMCP::SameLine();
-                            if (ImGuiMCP::Button("Add Entry (Ref)")) {
-                                if (auto* form = ref->As<RE::TESForm>()) {
-                                    swaps.push_back({strength, form});
-                                }
-                            }
+                        if (ImGuiMCP::Button("Add Entry")) {
+                            swaps.push_back({strength, base->GetFormID()});
                         }
 
                         static std::vector<std::string> formBuffers;
                         if (formBuffers.size() != swaps.size()) {
                             formBuffers.resize(swaps.size());
                             for (size_t i = 0; i < swaps.size(); ++i)
-                                formBuffers[i] = Utils::FormIDToString(swaps[i].BaseObject->GetFormID());
+                                formBuffers[i] = Utils::FormIDToString(swaps[i].formID);
                         }
 
                         for (size_t i = 0; i < swaps.size(); ++i) {
@@ -461,8 +495,8 @@ namespace MCP {
                             strncpy_s(buf, formBuffers[i].c_str(), sizeof(buf) - 1);
                             if (ImGuiMCP::InputText(std::format("FormID##{}", i).c_str(), buf, sizeof(buf))) {
                                 formBuffers[i] = buf;
-                                if (auto* form = Utils::ParseForm(buf)) {
-                                    swaps[i].BaseObject = form;
+                                if (auto formID = Utils::ParseForm(buf)) {
+                                    swaps[i].formID = formID;
                                 }
                             }
                             ImGuiMCP::SameLine();
@@ -478,10 +512,22 @@ namespace MCP {
                             formBuffers.clear();
                         }
                         ImGuiMCP::SameLine();
-                        if (ImGuiMCP::Button("Save BaseObjSwap Config")) {
-                            windFram->AddNewBaseObjSwapConfig(swaps, headingRotation, angleFactor);
-                            auto [windAngle, windSpeed] = Wind::Manager::GetSingleton()->GetTargets();
-                            windFram->RefLoad(ref, windSpeed, windAngle);
+                        if (ImGuiMCP::Button("Save BaseObjSwap Config (Base)")) {
+                            windFram->AddNewBaseObjSwapConfig(base->GetFormID(), swaps, headingRotation, angleFactor);
+                            RE::TES::GetSingleton()->ForEachReference([](RE::TESObjectREFR* ref) {
+                                auto [angle, strength] = Wind::Manager::GetSingleton()->GetTargets();
+                                WindFramework::GetSingleton()->RefLoad(ref, angle, strength);
+                                return RE::BSContainer::ForEachResult::kContinue;
+                            });
+                        }
+                        ImGuiMCP::SameLine();
+                        if (ImGuiMCP::Button("Save BaseObjSwap Config (Ref)")) {
+                            windFram->AddNewBaseObjSwapConfig(ref->GetFormID(), swaps, headingRotation, angleFactor);
+                            RE::TES::GetSingleton()->ForEachReference([](RE::TESObjectREFR* ref) {
+                                auto [angle, strength] = Wind::Manager::GetSingleton()->GetTargets();
+                                WindFramework::GetSingleton()->RefLoad(ref, angle, strength);
+                                return RE::BSContainer::ForEachResult::kContinue;
+                            });
                         }
                         ImGuiMCP::SameLine();
                         if (ImGuiMCP::Button("Remove BaseObjSwap Config")) {
@@ -504,6 +550,12 @@ namespace MCP {
 
                         windFram->RemovePushConfig(base->GetFormID());
                         windFram->RemovePushConfig(ref->GetFormID());
+
+                        windFram->RemoveModelSwapConfig(base->GetFormID());
+                        windFram->RemoveModelSwapConfig(ref->GetFormID());
+
+                        windFram->RemoveBaseObjSwapConfig(base->GetFormID());
+                        windFram->RemoveBaseObjSwapConfig(ref->GetFormID());
                     }
                 }
             }
@@ -795,12 +847,12 @@ namespace MCP {
                         ImGuiMCP::InputFloat(std::format("Strength##base_{}_{}", formID, i).c_str(),
                                              &editBaseSwaps[i].strength);
                         char buf[64];
-                        strncpy_s(buf, Utils::FormIDToString(editBaseSwaps[i].BaseObject->GetFormID()).c_str(),
+                        strncpy_s(buf, Utils::FormIDToString(editBaseSwaps[i].formID).c_str(),
                                   sizeof(buf) - 1);
                         if (ImGuiMCP::InputText(std::format("FormID##base_{}_{}", formID, i).c_str(), buf,
                                                 sizeof(buf))) {
-                            if (auto* form = Utils::ParseForm(buf)) {
-                                editBaseSwaps[i].BaseObject = form;
+                            if (auto baseformID = Utils::ParseForm(buf)) {
+                                editBaseSwaps[i].formID = baseformID;
                             }
                         }
                         ImGuiMCP::SameLine();
@@ -810,7 +862,7 @@ namespace MCP {
                         }
                     }
                     if (ImGuiMCP::Button(std::format("Save##base_{:08X}", formID).c_str())) {
-                        windFram->AddNewBaseObjSwapConfig(editBaseSwaps, baseHeadingBuf,
+                        windFram->AddNewBaseObjSwapConfig(formID, editBaseSwaps, baseHeadingBuf,
                                                           baseAngleFactorBuf);
                     }
                     ImGuiMCP::SameLine();
@@ -824,6 +876,7 @@ namespace MCP {
     }
 
     void __stdcall MCP::RenderLog() {
+        auto* conf = Config::GetSingleton();
         ImGuiMCP::Checkbox("Trace", &MCPLog::log_trace);
         ImGuiMCP::SameLine();
         ImGuiMCP::Checkbox("Info", &MCPLog::log_info);
@@ -831,6 +884,8 @@ namespace MCP {
         ImGuiMCP::Checkbox("Warning", &MCPLog::log_warning);
         ImGuiMCP::SameLine();
         ImGuiMCP::Checkbox("Error", &MCPLog::log_error);
+        ImGuiMCP::SameLine();
+        ImGuiMCP::Checkbox("Time Logs", &conf->EnableTimeLogging);
         ImGuiMCP::InputText("Custom Filter", MCPLog::custom, 255);
 
         // if"Generate Log" button is pressed, read the log file

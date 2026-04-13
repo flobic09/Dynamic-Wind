@@ -89,13 +89,13 @@ public:
             return false;
         }
 
-        auto* form = Utils::ParseForm(j["FormID"].get<std::string>());
-        if (!form) {
+        RE::FormID formID = Utils::ParseForm(j["FormID"].get<std::string>());
+        if (formID == 0) {
             logger::error("Failed to parse FormID {} '{}'", j["FormID"].get<std::string>(), outConfig.formID);
             return false;
         }
 
-        outConfig.formID = form->GetFormID();
+        outConfig.formID = formID;
         if (outConfig.formID == 0) {
             logger::error("Failed to parse FormID {} '{}'", j["FormID"].get<std::string>(), outConfig.formID);
             return false;

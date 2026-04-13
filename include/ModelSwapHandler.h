@@ -95,13 +95,13 @@ private:
             return false;
         }
 
-        auto* form = Utils::ParseForm(j["FormID"].get<std::string>());
-        if (!form) {
+        auto formID = Utils::ParseForm(j["FormID"].get<std::string>());
+        if (formID == 0) {
             logger::error("Failed to parse FormID {} '{}'", j["FormID"].get<std::string>(), outConfig.formID);
             return false;
         }
 
-        outConfig.formID = form->GetFormID();
+        outConfig.formID = formID;
         outConfig.headingRotation = j.value("headingRotation", 0.0f);
         outConfig.angleFactor = j.value("angleFactor", 0.0f);
         outConfig.filePath = path;

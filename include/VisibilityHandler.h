@@ -17,7 +17,7 @@ public:
         for (auto& cfg : LoadAllConfigs("Data\\SKSE\\Plugins\\DynamicWind\\Visibility")) {
             _configs[cfg.formID] = cfg;
         }
-        logger::info("Loaded {} Animation Configs", _configs.size());
+        logger::info("Loaded {} Visibility Configs", _configs.size());
     }
 
     std::unordered_map<RE::FormID, VisibilityConfig>& GetConfigs() { return _configs; }
@@ -56,7 +56,6 @@ public:
 
         const auto& cfg = it->second;
 
-        // Alignment factor
         float objectAngle = ref->GetAngle().z + cfg.headingRotation;
         float delta = windAngle + objectAngle;
         while (delta > M_PI) delta -= M_PI * 2.0f;
@@ -122,14 +121,14 @@ private:
             return false;
         }
 
-        auto* form = Utils::ParseForm(j["FormID"].get<std::string>());
+        auto formID = Utils::ParseForm(j["FormID"].get<std::string>());
 
-        if (!form) {
+        if (formID == 0) {
             logger::error("Failed to parse FormID {} '{}'", j["FormID"].get<std::string>(), outConfig.formID);
             return false;
         }
 
-        outConfig.formID = form->GetFormID();
+        outConfig.formID = formID;
         outConfig.filePath = path;
 
         if (outConfig.formID == 0) {

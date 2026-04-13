@@ -11,25 +11,18 @@ namespace Wind {
     public:
         void Update(RE::Actor* player, float deltaTime) {
 
-            auto Worldspace = player->GetWorldspace();
-            auto Location = Worldspace->location;
-            bool isCave = Location ? Location->HasKeywordByEditorID("LocSetCave") ||
-                                         Location->HasKeywordByEditorID("LocSetCaveIce")
-                                   : false;
-
-            auto currentCell = player->GetParentCell();
-
-            if (currentCell->IsInteriorCell() || isCave) {
-                if ((_previousWorldspace != Worldspace) || (_previousCell != currentCell)) {
-                    _previousWorldspace = Worldspace;
+            if (!Utils::IsInWindCell(player)) {
+                auto currentWorldspace = player->GetWorldspace();
+                auto currentCell = player->GetParentCell();
+                if ((_previousWorldspace != currentWorldspace) || (_previousCell != currentCell)) {
+                    _previousWorldspace = currentWorldspace;
                     _previousCell = currentCell;
                     logger::info("Cell is Interior or Cave, no wind here");
                     InteriorCellUpdate();
                 }
                 return;
             }
-            // Exterior cell
-            
+
             auto* sky = RE::Sky::GetSingleton();
             if (!sky || !sky->currentWeather) {
                 return;
@@ -65,14 +58,13 @@ namespace Wind {
                 sky->windSpeed = _targetStrength;
                 sky->windAngle = _targetAngle;
                 if (_UpdateWindFramework) {
-                    WindFramework::GetSingleton()->Update(finalStrength, finalAngle);
+                    WindFramework::GetSingleton()->Update(finalStrength, finalAngle, deltaTime);
                 }
             } else {
                 sky->windSpeed = finalStrength;
                 sky->windAngle = finalAngle;
-                WindFramework::GetSingleton()->Update(finalStrength, finalAngle);
+                WindFramework::GetSingleton()->Update(finalStrength, finalAngle, deltaTime);
             }
-            
         }
 
         void SetTargets(float angle, float speed) {

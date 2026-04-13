@@ -39,9 +39,10 @@ public:
         // Love it was there since always, but never used
         auto* treeMgr = RE::BSTreeManager::GetSingleton();
         if (treeMgr) {
-            float treeDir = windAngle - (M_PI / 2.0f);
-            RE::NiPoint2 treeWindDir = {std::sin(treeDir), std::cos(treeDir)};
+            float treeDir = windAngle - M_PI;
+            RE::NiPoint2 treeWindDir = {std::cos(treeDir), std::sin(treeDir)};
             treeMgr->windDirection = treeWindDir;
+            // tree data (Amplitude and Flexibility) works much better
             // treeMgr->windMagnitude = _targetStrength / 10.0f;
         }
 
@@ -62,22 +63,6 @@ public:
 
         treeCfg.formID = tree->GetFormID();
         treeCfg.max = cfg;
-
-        treeCfg.min.trunkFlexibility = tree->data.trunkFlexibility;
-        treeCfg.min.branchFlexibility = tree->data.branchFlexibility;
-
-        treeCfg.min.trunkAmplitude = tree->data.trunkAmplitude;
-        treeCfg.min.frontAmplitude = tree->data.frontAmplitude;
-        treeCfg.min.backAmplitude = tree->data.backAmplitude;
-        treeCfg.min.sideAmplitude = tree->data.sideAmplitude;
-
-        treeCfg.min.frontFrequency = tree->data.frontFrequency;
-        treeCfg.min.backFrequency = tree->data.backFrequency;
-        treeCfg.min.sideFrequency = tree->data.sideFrequency;
-
-        treeCfg.min.leafFlexibility = tree->data.leafFlexibility;
-        treeCfg.min.leafAmplitude = tree->data.leafAmplitude;
-        treeCfg.min.leafFrequency = tree->data.leafFrequency;
 
         _configs[treeCfg.formID] = treeCfg;
         
@@ -138,13 +123,17 @@ private:
             return false;
         }
 
-        auto* form = Utils::ParseForm(j["FormID"].get<std::string>());
+        auto formID = Utils::ParseForm(j["FormID"].get<std::string>());
 
-        if (!form) {
+        if (formID == 0) {
             logger::error("Failed to parse FormID {} '{}'", j["FormID"].get<std::string>(), outConfig.formID);
             return false;
         }
         
+        auto form = RE::TESForm::LookupByID(formID);
+        if (!form) {
+            logger::error("Can't find form for FormID {} '{}'", j["FormID"].get<std::string>(), outConfig.formID);
+        }
 
         if (auto tree = form->As<RE::TESObjectTREE>()) {
             outConfig.formID = form->GetFormID();

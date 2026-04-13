@@ -4,7 +4,8 @@ namespace MCP {
 
     void Register();
 
-    // For debug purposes
+    void __stdcall RenderConfig();
+    // Framework
     void __stdcall RenderFrameworkTools();
     void __stdcall RenderLoadedConfigs();
     void __stdcall RenderLog();
