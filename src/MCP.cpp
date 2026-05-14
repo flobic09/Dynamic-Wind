@@ -31,6 +31,11 @@ namespace MCP {
         ImGuiMCP::Checkbox("Rotation Handler", &set->RotationHandlerEnabled);
         ImGuiMCP::Checkbox("Tree Handler", &set->TreeHandlerEnabled);
         ImGuiMCP::Checkbox("Visibility Handler", &set->VisibilityHandlerEnabled);
+        ImGuiMCP::SliderFloat("Min Wind Strength", &set->minWindStrength, 0.0f, 1.0f);
+        ImGuiMCP::SliderFloat("Max Wind Strength", &set->maxWindStrength, 0.0f, 1.0f);
+        if (set->maxWindStrength < set->minWindStrength) {
+            set->maxWindStrength = set->minWindStrength;
+        }
         if (ImGuiMCP::Button("Save Settings")) {
             set->SaveIni();
         }

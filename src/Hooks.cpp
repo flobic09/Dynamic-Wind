@@ -9,10 +9,12 @@ namespace Hooks {
         auto* conf = Config::GetSingleton();
         if (conf->ModActive) {
             auto start = std::chrono::high_resolution_clock::now();
+
             Wind::Manager::GetSingleton()->Update(a_this, a_delta);
-            auto end = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double, std::milli> elapsed = end - start;
+
             if (conf->EnableTimeLogging) {
+                auto end = std::chrono::high_resolution_clock::now();
+                std::chrono::duration<double, std::milli> elapsed = end - start;
                 logger::debug("Wind::Manager Update {} ms", elapsed.count());
             }
         }
@@ -27,9 +29,9 @@ namespace Hooks {
             auto [angle, strength] = Wind::Manager::GetSingleton()->GetTargets();
             WindFramework::GetSingleton()->RefLoad(a_this, angle, strength);
 
-            auto end = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double, std::milli> elapsed = end - start;
             if (conf->EnableTimeLogging) {
+                auto end = std::chrono::high_resolution_clock::now();
+                std::chrono::duration<double, std::milli> elapsed = end - start;
                 logger::debug("WindFramework RefLoad {} ms", elapsed.count());
             }
         }

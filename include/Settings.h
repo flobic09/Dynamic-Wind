@@ -69,7 +69,36 @@ public:
                     VisibilityHandlerEnabled = (value == "true" || value == "True" || value == "1");
                 }
             }
+            if (line.contains("fMinWindStrength")) {
+                auto pos = line.find('=');
+                if (pos != std::string::npos) {
+                    std::string value = line.substr(pos + 1);
+                    minWindStrength = std::stof(value);
+                }
+            }
+            if (line.contains("fMaxWindStrength")) {
+                auto pos = line.find('=');
+                if (pos != std::string::npos) {
+                    std::string value = line.substr(pos + 1);
+                    maxWindStrength = std::stof(value);
+                }
+            }
         }
+
+        if (maxWindStrength < minWindStrength) {
+            maxWindStrength = minWindStrength;
+        }
+        if (minWindStrength < 0.0f) {
+            minWindStrength = 0.0f;
+        }
+        if (maxWindStrength > 1.0f) {
+            maxWindStrength = 1.0f;
+        }
+
+        logger::info("Settings loaded from INI");
+        logger::info("ModActive: {}, AnimationHandlerEnabled: {}, BaseObjSwapHandlerEnabled: {}, ModelSwapHandlerEnabled: {}, PushHandlerEnabled: {}, RotationHandlerEnabled: {}, TreeHandlerEnabled: {}, VisibilityHandlerEnabled: {}, MinWindStrength: {}, MaxWindStrength: {}",
+            ModActive, AnimationHandlerEnabled, BaseObjSwapHandlerEnabled, ModelSwapHandlerEnabled, PushHandlerEnabled,
+            RotationHandlerEnabled, TreeHandlerEnabled, VisibilityHandlerEnabled, minWindStrength, maxWindStrength);
     }
 
     void SaveIni() {
@@ -86,6 +115,11 @@ public:
         file << "bRotationHandlerEnabled=" << (RotationHandlerEnabled ? "true" : "false") << std::endl;
         file << "bTreeHandlerEnabled=" << (TreeHandlerEnabled ? "true" : "false") << std::endl;
         file << "bVisibilityHandlerEnabled=" << (VisibilityHandlerEnabled ? "true" : "false") << std::endl;
+
+        file << "fMinWindStrength=" << minWindStrength << std::endl;
+        file << "fMaxWindStrength=" << maxWindStrength << std::endl;
+
+        logger::info("Settings saved to INI");
     }
 
     bool ModActive{true};
@@ -97,5 +131,8 @@ public:
     bool TreeHandlerEnabled{true};
     bool VisibilityHandlerEnabled{true};
     bool EnableTimeLogging{false};
+
+    float minWindStrength{0.0f};
+    float maxWindStrength{1.0f};
 
 };

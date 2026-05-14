@@ -3,6 +3,7 @@
 #include "REX/REX.h"
 
 #include "WindFramework.h"
+#include "Settings.h"
 
 #define M_PI 3.14159265358979323846f
 
@@ -84,10 +85,16 @@ namespace Wind {
         void GenerateNewTargets(const RE::Sky* sky) {
             float vanillaStrength = float(sky->currentWeather->data.windSpeed) / 255.0f;
 
-            _targetAngle = RandomFloat(-M_PI, M_PI); // 100% random direction
-            _targetStrength = vanillaStrength * RandomFloat(0.9f, 1.1f); // A bit random strength
+            auto* conf = Config::GetSingleton();
+            auto* windFramework = WindFramework::GetSingleton();
 
-            WindFramework::GetSingleton()->NewTargets(_targetStrength, _targetAngle);
+            float scaledStrength =
+                conf->minWindStrength + (vanillaStrength * (conf->maxWindStrength - conf->minWindStrength));
+
+            _targetAngle = RandomFloat(-M_PI, M_PI); // 100% random direction
+            _targetStrength = scaledStrength * RandomFloat(0.9f, 1.1f);  // A bit random strength
+
+            windFramework->NewTargets(_targetStrength, _targetAngle);
 
             logger::info("NewTargets: _targetAngle: {}, _targetStrength {}, vanillaStrength {}", _targetAngle,
                          _targetStrength, vanillaStrength);

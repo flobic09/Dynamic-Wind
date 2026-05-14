@@ -201,8 +201,10 @@ namespace Utils {
         if (!ref) {
             return false;
         }
+
         RE::BGSLocation* worldspaceLocation{nullptr};
         RE::BGSLocation* cellLocation{nullptr};
+        bool isInteriorCell{false};
 
         auto currentWorldspace = ref->GetWorldspace();
         if (currentWorldspace) {
@@ -211,16 +213,20 @@ namespace Utils {
         auto currentCell = ref->GetParentCell();
         if (currentCell) {
             cellLocation = currentCell->GetLocation();
+            isInteriorCell = currentCell->IsInteriorCell();
         }
 
         bool isCaveWorldspace = worldspaceLocation ? worldspaceLocation->HasKeywordByEditorID("LocSetCave") ||
                                                          worldspaceLocation->HasKeywordByEditorID("LocSetCaveIce")
                                                    : false;
-        bool isCaveCell = cellLocation ? cellLocation->HasKeywordByEditorID("LocSetCave") ||
-                                             cellLocation->HasKeywordByEditorID("LocSetCaveIce")
-                                       : false;
+        
+        // some cells in exterior worldspaces can have cave keyword, 
+        // but they are not actual caves (e.g. cave entrances).
+        // bool isCaveCell = cellLocation ? cellLocation->HasKeywordByEditorID("LocSetCave") ||
+        //                                      cellLocation->HasKeywordByEditorID("LocSetCaveIce")
+        //                                : false;
 
-        if (currentCell->IsInteriorCell() || isCaveWorldspace) {
+        if (isInteriorCell || isCaveWorldspace) {
             return false;
         }
         return true;
