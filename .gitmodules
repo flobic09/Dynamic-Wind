@@ -1,0 +1,3 @@
+[submodule "extern/commonlib"]
+	path = extern/commonlib
+	url = https://github.com/alandtse/CommonLibVR.git
